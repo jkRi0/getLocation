@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Get Current Coordinates</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 24px;
+        line-height: 1.4;
+      }
+      .row {
+        margin: 8px 0;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      button {
+        padding: 10px 14px;
+        border: 1px solid #d1d5db;
+        background: #111827;
+        color: #fff;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .muted {
+        color: #6b7280;
+      }
+      .error {
+        color: #b91c1c;
+        white-space: pre-wrap;
+      }
+      .card {
+        margin-top: 16px;
+        padding: 14px;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        max-width: 560px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>My Current Coordinates</h1>
+    <p class="muted">Note: This works only on secure origins (HTTPS) or <code>localhost</code>.</p>
+
+    <div class="row">
+      <button id="btnGet">Get location</button>
+      <button id="btnStop" disabled>Stop updating</button>
+    </div>
+
+    <div class="card">
+      <div class="row"><strong>Status:</strong> <span id="status">Idle</span></div>
+      <div class="row"><strong>Latitude:</strong> <span id="lat">-</span></div>
+      <div class="row"><strong>Longitude:</strong> <span id="lng">-</span></div>
+      <div class="row"><strong>Accuracy (m):</strong> <span id="acc">-</span></div>
+      <div class="row"><strong>Timestamp:</strong> <span id="time">-</span></div>
+      <div class="row">
+        <strong>Map:</strong>
+        <div class="muted">Updates when your coordinates change.</div>
+      </div>
+      <iframe
+        id="mapFrame"
+        title="Map preview"
+        width="100%"
+        height="220"
+        style="border: 1px solid #e5e7eb; border-radius: 12px;"
+        loading="lazy"
+        referrerpolicy="no-referrer"
+      ></iframe>
+      <div class="row error" id="err"></div>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById('status');
+      const latEl = document.getElementById('lat');
+      const lngEl = document.getElementById('lng');
+      const accEl = document.getElementById('acc');
+      const timeEl = document.getElementById('time');
+      const errEl = document.getElementById('err');
+      const mapFrame = document.getElementById('mapFrame');
+      const btnGet = document.getElementById('btnGet');
+      const btnStop = document.getElementById('btnStop');
+
+      let watchId = null;
+
+      function setError(message) {
+        errEl.textContent = message || '';
+      }
+
+      function setStatus(message) {
+        statusEl.textContent = message;
+      }
+
+      function renderPosition(pos) {
+        const { latitude, longitude, accuracy } = pos.coords;
+        latEl.textContent = latitude.toFixed(6);
+        lngEl.textContent = longitude.toFixed(6);
+        accEl.textContent = Number.isFinite(accuracy) ? accuracy.toFixed(1) : '-';
+        timeEl.textContent = new Date(pos.timestamp).toLocaleString();
+
+        // OpenStreetMap embed (no API key required)
+        // bbox is in lon/lat: left,bottom,right,top
+        const pad = 0.005;
+        const left = longitude - pad;
+        const right = longitude + pad;
+        const bottom = latitude - pad;
+        const top = latitude + pad;
+        const marker = `marker=${encodeURIComponent(latitude + ',' + longitude)}`;
+        const bbox = `bbox=${encodeURIComponent(left + ',' + bottom + ',' + right + ',' + top)}`;
+        mapFrame.src = `https://www.openstreetmap.org/export/embed.html?${bbox}&layer=mapnik&${marker}`;
+      }
+
+      function handleGeoError(err) {
+        let msg = 'Unable to get location.';
+        if (err && typeof err.code === 'number') {
+          switch (err.code) {
+            case 1:
+              msg = 'Permission denied. Allow location access in your browser/site settings.';
+              break;
+            case 2:
+              msg = 'Position unavailable. Try enabling GPS/Wi‑Fi, or try again later.';
+              break;
+            case 3:
+              msg = 'Request timed out. Try again.';
+              break;
+          }
+        }
+        setStatus('Error');
+        setError(msg);
+      }
+
+      function startWatching() {
+        if (!('geolocation' in navigator)) {
+          setStatus('Unsupported');
+          setError('Geolocation is not supported by this browser.');
+          return;
+        }
+
+        setError('');
+        setStatus('Requesting permission…');
+
+        const options = {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
+        };
+
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            setStatus('Live');
+            renderPosition(pos);
+            btnStop.disabled = false;
+          },
+          (err) => {
+            btnStop.disabled = true;
+            handleGeoError(err);
+          },
+          options
+        );
+      }
+
+      function stopWatching() {
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+        }
+        btnStop.disabled = true;
+        setStatus('Stopped');
+      }
+
+      btnGet.addEventListener('click', startWatching);
+      btnStop.addEventListener('click', stopWatching);
+    </script>
+  </body>
+</html>
